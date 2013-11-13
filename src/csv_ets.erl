@@ -4,14 +4,14 @@
 
 load(Filename) ->
   Db = csvparser:readfile(Filename),
-  ets:new(csvdb, [named_table]),
+  ets:new(csvdb, [named_table, public]),
   [ insert_into_db(Entry) || Entry <- Db ].
 %%  ets:insert(csvdb, Db).
 
 insert_into_db(Entry) ->
   {X,_} = Entry,
   case read(binary_to_list(X)) of
-    not_found -> ets:insert(csvdb, [Entry]);
+    { error, not_found } -> ets:insert(csvdb, [Entry]);
     _ -> { error, dup }
   end.
 
@@ -26,7 +26,7 @@ num_to_binary(X) when is_float(X) -> float_to_binary(X, [{decimals, 15}, compact
 read(UserId) -> 
   case ets:lookup(csvdb, list_to_binary(UserId)) of 
     [{_, Value}] -> Value;
-    [] -> not_found
+    [] -> { error, not_found }
   end.
 
 write(UserId, Amount) ->

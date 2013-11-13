@@ -1,8 +1,8 @@
 -module(csvparser).
 
--export([readfile/1, run/0]).
+-export([readfile/1, run/0, trim/1]).
 
-trim(Bin= <<C,BinTail/binary>>) ->
+trim(Bin = <<C,BinTail/binary>>) ->
     case is_whitespace(C) of
         true -> trim(BinTail);
         false -> trim_tail(Bin)
