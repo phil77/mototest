@@ -23,5 +23,12 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
+    Port = 
+    case application:get_env(test1, telnet_port) of
+        { ok, Value } -> Value;
+        undefined -> 1234
+    end,
+    {ok, { {one_for_one, 5, 10}, 
+           [ ?CHILD(myserver_gen, worker),
+             {telnetserver, {telnetserver, start_link, [Port]}, permanent, brutal_kill, worker, [telnetserver]} ]} }.
 

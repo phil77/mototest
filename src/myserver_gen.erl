@@ -4,7 +4,7 @@
  
 %% API
 -export([start_link/0]).
--export([inc/1]).
+-export([write/2, read/1, flush/0]).
  
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -12,27 +12,40 @@
  
 -define(SERVER, ?MODULE).
  
--record(state, { counter }).
+-record(state, { dirty }).
  
 %%% API
 start_link() ->
-    gen_server:start_link(?MODULE, [], []).
-%    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+%    gen_server:start_link(?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
  
-inc(S) ->
-    gen_server:call(S, inc).
+read(UserId) ->
+  gen_server:call(?SERVER, { read, UserId }).
+
+write(UserId, Amount) ->
+  gen_server:call(?SERVER, { write, UserId, Amount }).
+
+flush() ->
+  gen_server:cast(?SERVER, { flush }).
 
 %%% gen_server callbacks
 init([]) ->
-    {ok, #state{counter=0}}.
+  csv_ets:load("test.csv"),
+  {ok, #state{dirty=false}}.
  
-handle_call(inc, _From, State) ->
-    Reply = { ok, State#state.counter },
-    NewState = State#state{counter=State#state.counter + 1},
-    {reply, Reply, NewState}.
- 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_call({read, UserId}, _From, State) ->
+  Reply = csv_ets:read(binary_to_list(UserId)),
+  {reply, Reply, State};
+handle_call({write, UserId, Amount}, _From, State) ->
+  Reply = csv_ets:write(binary_to_list(UserId), Amount),
+  NewState = State#state{dirty=true},
+  {reply, Reply, NewState}.
+
+handle_cast({flush}, #state{dirty=true}=State) ->
+  csv_ets:save("test.csv"),
+  {noreply, State#state{dirty=false}};
+handle_cast({flush}, State) ->
+  {noreply, State}.
  
 handle_info(_Info, State) ->
     {noreply, State}.

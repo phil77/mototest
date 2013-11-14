@@ -25,7 +25,7 @@ num_to_binary(X) when is_float(X) -> float_to_binary(X, [{decimals, 15}, compact
 
 read(UserId) -> 
   case ets:lookup(csvdb, list_to_binary(UserId)) of 
-    [{_, Value}] -> Value;
+    [{_, Value}] -> { ok, Value };
     [] -> { error, not_found }
   end.
 

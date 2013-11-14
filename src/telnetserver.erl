@@ -1,18 +1,24 @@
 -module(telnetserver).
--export[start_server/1].
- 
+-export[start_link/1].
+
+start_link(Port) ->
+  { ok, spawn_link(fun() -> start_server(Port) end) }.
+
 start_server(Port) ->
-    csv_ets:load("test.csv"),
-    {ok, Listen} = gen_tcp:listen(Port, [binary, {active, false}, {reuseaddr, true}]),
-    spawn(fun() -> acceptor(Listen) end),
-    ok.
+%    csv_ets:load("test.csv"),
+%    myserver_gen:start_link(),
+    { ok, Listen } = gen_tcp:listen(Port, [binary, {active, false}, {reuseaddr, true}]),
+    spawn_link(fun() -> acceptor(Listen) end),
+    receive
+    _ -> ok
+    end.
  
 acceptor(ListenSocket) ->
     {ok, Socket} = gen_tcp:accept(ListenSocket),
-    spawn(fun() -> acceptor(ListenSocket) end),
+    spawn_link(fun() -> acceptor(ListenSocket) end),
     erlang:send_after(5000, self(), echo),
     handle(Socket).
- 
+
 handle(Socket) ->
     inet:setopts(Socket, [{active, once}]),
     receive
@@ -20,17 +26,9 @@ handle(Socket) ->
             case handle_msg(Msg) of
               { reply, Reply } -> gen_tcp:send(Socket, Reply), handle(Socket);
               { error, Reply } -> gen_tcp:send(Socket, <<"Error! ", Reply/binary, "\n">>), handle(Socket);
-              { error, _ }     -> gen_tcp:send(Socket, <<"Internal Error!\n">>), handle(Socket);
-              quit -> gen_tcp:send(Socket, <<"Bye bye.\n">>), ok
-            end;
-        echo ->
-            {H,M,S} = time(),
-            Bin = << (integer_to_binary(H))/binary, ":",
-                     (integer_to_binary(M))/binary, ":", 
-                     (integer_to_binary(S))/binary, "\n" >>,
-            %%gen_tcp:send(Socket, Bin),
-            %%erlang:send_after(5000, self(), echo),
-            handle(Socket)
+              quit             -> gen_tcp:send(Socket, <<"Bye bye.\n">>), ok;
+              _                -> gen_tcp:send(Socket, <<"Internal Error!\n">>), handle(Socket)
+            end
     end.
 
 handle_msg(<<"quit", _/binary>>) -> quit;
@@ -42,15 +40,17 @@ handle_msg(<<"set", Params/binary>>) ->
     _ -> { error, generic_error }
   end;
 handle_msg(<<"flush", _/binary>>) ->
-  csv_ets:save("temp.bak"),
+%  csv_ets:save("temp.bak"),
+  myserver_gen:flush(),
   { reply, <<"Flush done.\n">> };  
 handle_msg(<<Msg/binary>>) -> { reply, Msg }.
     
 process_get(Msg) ->
   [_, Param] = binary:split(Msg, <<" ">>, [global]),
   Name = csvparser:trim(Param),
-  case csv_ets:read(binary_to_list(Name)) of
-    Value -> <<"Value = ", (num_to_binary(Value))/binary, "\n">>;
+%  case csv_ets:read(binary_to_list(Name)) of
+  case myserver_gen:read(Name) of
+    { ok, Value }        -> <<"Value = ", (num_to_binary(Value))/binary, "\n">>;
     { error, not_found } -> <<Name/binary, " not found.\n">>
   end.
 
@@ -72,7 +72,7 @@ process_set(Msg) ->
             binary_to_float(Value)
         end,
       csv_ets:write(binary_to_list(Name), NumValue),
-      { ok, <<"set ", Name/binary, ",", Value/binary, " done.\n">> };
+      { ok, <<Name/binary, " <- ", Value/binary, " done.\n">> };
     _ ->
       { error, bad_params }
   end.
